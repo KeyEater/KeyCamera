@@ -7,25 +7,25 @@ local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local Inputs = require(script.Parent:WaitForChild("Inputs"))
 local ZoomController = require(script.Parent:WaitForChild("ZoomController"))
 
-local function DisconnectAll(Connections: {RBXScriptConnection})
-    for _, c in ipairs(Connections) do
-        c:Disconnect()
-    end
-    table.clear(Connections)
+local function DisconnectAll(Connections: { RBXScriptConnection })
+	for _, c in ipairs(Connections) do
+		c:Disconnect()
+	end
+	table.clear(Connections)
 end
 
 -- Variables
 local savedRotationType, savedMouseBehavior
-local lastRotationTypeOverride: Enum.RotationType? 
+local lastRotationTypeOverride: Enum.RotationType?
 local lastMouseBehaviorOverride: Enum.MouseBehavior?
 
 -- Constants
 local MIN_Y = math.rad(-80)
 local MAX_Y = math.rad(80)
 
-local ZERO_VECTOR3 = Vector3.new(0,0,0)
+local ZERO_VECTOR3 = Vector3.new(0, 0, 0)
 
-local HEAD_OFFSET = Vector3.new(0,1.5,0)
+local HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 local R15_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 local R15_HEAD_OFFSET_NO_SCALING = Vector3.new(0, 2, 0)
 local HUMANOID_ROOT_PART_SIZE = Vector3.new(2, 2, 1)
@@ -39,39 +39,47 @@ local DEFAULT_CAMERA_MAX_ZOOM_DISTANCE = 400
 local FIRST_PERSON_DISTANCE_THRESHOLD = 0.5
 
 type BaseCameraClass = {
-    __index: BaseCameraClass,
-    new: (DefaultSettings: CameraSettings) -> BaseCamera,
+	__index: BaseCameraClass,
+	new: (DefaultSettings: CameraSettings) -> BaseCamera,
 
-	CheckSettings: (self : BaseCamera) -> (),
+	CheckSettings: (self: BaseCamera) -> (),
 	GetSettings: (self: BaseCamera) -> CameraSettings,
 	UpdateSettings: (self: BaseCamera, preset: CameraSettings) -> (),
-    UpdateMouseBehavior: (self : BaseCamera) -> (),
-	GetSubjectPosition: (self : BaseCamera) -> (Vector3),
-	EnterFirstPerson: (self : BaseCamera) -> (),
-	LeaveFirstPerson: (self : BaseCamera) -> (),
-	SetCameraToSubjectDistance: (self : BaseCamera, desiredDistance: number) -> (),
-	CalculateNewLookCFrameFromArg: (self : BaseCamera, suppliedLookVector: Vector3, rotateInput: Vector2) -> CFrame,
+	UpdateMouseBehavior: (self: BaseCamera) -> (),
+	ApplyRecoil: (self: BaseCamera, recoil: Vector2) -> (),
+	GetSubjectPosition: (self: BaseCamera) -> Vector3,
+	EnterFirstPerson: (self: BaseCamera) -> (),
+	LeaveFirstPerson: (self: BaseCamera) -> (),
+	SetCameraToSubjectDistance: (self: BaseCamera, desiredDistance: number) -> (),
+	CalculateNewLookCFrameFromArg: (self: BaseCamera, suppliedLookVector: Vector3, rotateInput: Vector2) -> CFrame,
 	CalculateNewLookVectorFromArg: (self: BaseCamera, suppliedLookVector: Vector3, rotateInput: Vector2) -> Vector3,
 
-	StepZoom: (self : BaseCamera) -> (),
-    Update: (self : BaseCamera, dt: number) -> (CFrame, CFrame),
+	StepZoom: (self: BaseCamera) -> (),
+	Update: (self: BaseCamera, dt: number) -> (CFrame, CFrame),
 
 	SetupConfigurations: (self: BaseCamera) -> (),
-	Enable: (self : BaseCamera) -> (),
-	Disable: (self : BaseCamera) -> ()
+	Enable: (self: BaseCamera) -> (),
+	Disable: (self: BaseCamera) -> (),
 }
 
-export type BaseCamera = typeof(setmetatable({} :: {
+export type BaseCamera = typeof(setmetatable(
+	{} :: {
 		enabled: boolean,
-        lastCameraMode: Enum.CameraMode?,
-        currentSubjectDistance: number,
+		lastCameraMode: Enum.CameraMode?,
+		currentSubjectDistance: number,
 		lastSubjectPosition: Vector3,
-        connections: {RBXScriptConnection},
+		connections: { RBXScriptConnection },
 		settings: CameraSettings,
 
+		recoilVector: Vector2?,
+		counterForceX: number,
+		counterForceY: number,
+
 		inFirstPerson: boolean,
-		lastUpdate: number
-}, {} :: BaseCameraClass))
+		lastUpdate: number,
+	},
+	{} :: BaseCameraClass
+))
 
 export type CameraSettings = {
 	FieldOfView: number,
@@ -79,26 +87,28 @@ export type CameraSettings = {
 	MouseLock: boolean,
 	CanZoom: boolean,
 	MinZoom: number,
-	MaxZoom: number
+	MaxZoom: number,
 }
 
 local BaseCamera = {}
 BaseCamera.__index = BaseCamera
 
-function BaseCamera.new(DefaultSettings: CameraSettings) 
-    local self: BaseCamera = setmetatable({
-        enabled = false,
-        lastCameraMode = nil,
-        currentSubjectDistance = 10,
+function BaseCamera.new(DefaultSettings: CameraSettings)
+	local self: BaseCamera = setmetatable({
+		enabled = false,
+		lastCameraMode = nil,
+		currentSubjectDistance = 10,
 		lastSubjectPosition = Vector3.new(),
-        connections = {},
+		connections = {},
 		settings = DefaultSettings,
 
+		recoil = Vector2.new(0, 0),
+
 		inFirstPerson = false,
-		lastUpdate = 0
-    }, BaseCamera)
+		lastUpdate = 0,
+	}, BaseCamera)
 	self:CheckSettings()
-    return self
+	return self
 end
 
 function BaseCamera:CheckSettings()
@@ -123,28 +133,32 @@ function BaseCamera:UpdateSettings(preset: CameraSettings)
 	self:CheckSettings()
 end
 
-function BaseCamera:UpdateMouseBehavior() 
+function BaseCamera:UpdateMouseBehavior()
 	if self.inFirstPerson or self.settings.MouseLock then
-        if UserGameSettings.RotationType ~= lastRotationTypeOverride then
-	        savedRotationType = UserGameSettings.RotationType
-        end
-       	UserGameSettings.RotationType = Enum.RotationType.CameraRelative
-        lastRotationTypeOverride = Enum.RotationType.CameraRelative
-        if UserInputService.MouseBehavior ~= lastMouseBehaviorOverride then
-        	savedMouseBehavior = UserInputService.MouseBehavior
-	    end
-	    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-	    lastMouseBehaviorOverride = Enum.MouseBehavior.LockCenter
+		if UserGameSettings.RotationType ~= lastRotationTypeOverride then
+			savedRotationType = UserGameSettings.RotationType
+		end
+		UserGameSettings.RotationType = Enum.RotationType.CameraRelative
+		lastRotationTypeOverride = Enum.RotationType.CameraRelative
+		if UserInputService.MouseBehavior ~= lastMouseBehaviorOverride then
+			savedMouseBehavior = UserInputService.MouseBehavior
+		end
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		lastMouseBehaviorOverride = Enum.MouseBehavior.LockCenter
 	else
 		if UserGameSettings.RotationType == lastRotationTypeOverride then
-		    UserGameSettings.RotationType = savedRotationType
-	    end
-	    lastRotationTypeOverride = nil	
+			UserGameSettings.RotationType = savedRotationType
+		end
+		lastRotationTypeOverride = nil
 		if UserInputService.MouseBehavior == lastMouseBehaviorOverride then
-	        UserInputService.MouseBehavior = savedMouseBehavior
-        end
-	    lastMouseBehaviorOverride = nil
-	end		
+			UserInputService.MouseBehavior = savedMouseBehavior
+		end
+		lastMouseBehaviorOverride = nil
+	end
+end
+
+function BaseCamera:ApplyRecoil(recoil: Vector2)
+	self.recoil += recoil
 end
 
 function BaseCamera:GetSubjectPosition(): Vector3
@@ -172,7 +186,7 @@ function BaseCamera:GetSubjectPosition(): Vector3
 				if subject.AutomaticScalingEnabled then
 					heightOffset = R15_HEAD_OFFSET
 					if bodyPartToFollow == subject.RootPart then
-						local rootPartSizeOffset = (subject.RootPart.Size.Y/2) - (HUMANOID_ROOT_PART_SIZE.Y/2)
+						local rootPartSizeOffset = (subject.RootPart.Size.Y / 2) - (HUMANOID_ROOT_PART_SIZE.Y / 2)
 						heightOffset = heightOffset + Vector3.new(0, rootPartSizeOffset, 0)
 					end
 				else
@@ -181,7 +195,7 @@ function BaseCamera:GetSubjectPosition(): Vector3
 			else
 				heightOffset = HEAD_OFFSET
 			end
-			if isDead then					
+			if isDead then
 				heightOffset = ZERO_VECTOR3
 			end
 			result = bodyPartToFollow.CFrame.Position + bodyPartToFollow.CFrame:vectorToWorldSpace(heightOffset)
@@ -203,7 +217,7 @@ function BaseCamera:EnterFirstPerson()
 end
 
 function BaseCamera:LeaveFirstPerson()
-	print("wip")	
+	print("wip")
 end
 
 function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
@@ -220,7 +234,7 @@ function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
 		if self.inFirstPerson then
 			self:LeaveFirstPerson()
 		end
-	end	
+	end
 	-- Pass target distance and zoom direction to the zoom controller
 	ZoomController.SetZoomParameters(self.currentSubjectDistance, math.sign(desiredDistance - lastDistance))
 end
@@ -232,10 +246,10 @@ function BaseCamera:StepZoom()
 	if math.abs(zoomDelta) > 0 then
 		local newZoom
 		if zoomDelta > 0 then
-			newZoom = zoom + zoomDelta*(1 + zoom*ZOOM_SENSITIVITY_CURVATURE)
+			newZoom = zoom + zoomDelta * (1 + zoom * ZOOM_SENSITIVITY_CURVATURE)
 			newZoom = math.max(newZoom, FIRST_PERSON_DISTANCE_THRESHOLD)
 		else
-			newZoom = (zoom + zoomDelta)/(1 - zoomDelta*ZOOM_SENSITIVITY_CURVATURE)
+			newZoom = (zoom + zoomDelta) / (1 - zoomDelta * ZOOM_SENSITIVITY_CURVATURE)
 			newZoom = math.max(newZoom, FIRST_PERSON_DISTANCE_MIN)
 		end
 
@@ -255,7 +269,9 @@ function BaseCamera:CalculateNewLookCFrameFromArg(suppliedLookVector: Vector3, r
 	local yTheta = math.clamp(rotateInput.Y, -MAX_Y + currPitchAngle, -MIN_Y + currPitchAngle)
 	local constrainedRotateInput = Vector2.new(rotateInput.X, yTheta)
 	local startCFrame = CFrame.new(ZERO_VECTOR3, currLookVector)
-	local newLookCFrame = CFrame.Angles(0, -constrainedRotateInput.X, 0) * startCFrame * CFrame.Angles(-constrainedRotateInput.Y,0,0)
+	local newLookCFrame = CFrame.Angles(0, -constrainedRotateInput.X, 0)
+		* startCFrame
+		* CFrame.Angles(-constrainedRotateInput.Y, 0, 0)
 	return newLookCFrame
 end
 
@@ -264,70 +280,73 @@ function BaseCamera:CalculateNewLookVectorFromArg(suppliedLookVector: Vector3, r
 	return newLookCFrame.LookVector
 end
 
-function BaseCamera:Update(dt: number)
-    local now = os.clock()
 
-    local camera = workspace.CurrentCamera
+
+function BaseCamera:Update(dt: number)
+	local now = os.clock()
+
+	local camera = workspace.CurrentCamera
 	local newCameraCFrame = camera.CFrame
 	local newCameraFocus = camera.Focus
 
 	local cameraLookVector = camera.CFrame.LookVector
 
-    local player = Players.LocalPlayer
+	local player = Players.LocalPlayer
 	local subjectPosition = self:GetSubjectPosition()
 
-    local rotateInput = Inputs.getRotation()
+	local rotateInput = Inputs.getRotation() + self.recoil * dt
+	self.recoil = self.recoil:Lerp(Vector2.zero, math.min(dt * 10, 1))
 
-    self:StepZoom()
+	
 
-    if player and camera and self.settings.MouseLock then
+	self:StepZoom()
+
+	if player and camera and self.settings.MouseLock then
 		local zoom = self.currentSubjectDistance
-        if not self.inFirstPerson then
+		if not self.inFirstPerson then
 			local newLookCFrame: CFrame = self:CalculateNewLookCFrameFromArg(cameraLookVector, rotateInput)
 			local offset: Vector3 = self.settings.Offset
-			local cameraRelativeOffset: Vector3 = offset.X * newLookCFrame.RightVector + offset.Y * newLookCFrame.UpVector + offset.Z * newLookCFrame.LookVector
+			local cameraRelativeOffset: Vector3 = offset.X * newLookCFrame.RightVector
+				+ offset.Y * newLookCFrame.UpVector
+				+ offset.Z * newLookCFrame.LookVector
 			subjectPosition = subjectPosition + cameraRelativeOffset
-        end
+		end
 		newCameraFocus = CFrame.new(subjectPosition)
 		local cameraFocusP = newCameraFocus.Position
 		local newLookVector = self:CalculateNewLookVectorFromArg(cameraLookVector, rotateInput)
 
 		--newCameraCFrame = CFrame.lookAlong(cameraFocusP - (zoom * newLookVector), newLookVector)
 		newCameraCFrame = CFrame.new(cameraFocusP - (zoom * newLookVector), cameraFocusP)
-    end
+	end
 
-    self.lastUpdate = now
+	self.lastUpdate = now
 	return newCameraCFrame, newCameraFocus
 end
 
 function BaseCamera:SetupConfigurations()
 	local camera = workspace.CurrentCamera
 	camera.FieldOfView = self.settings.FieldOfView
-
 end
 
 function BaseCamera:Enable()
-    if not self.enabled then
-        self.enabled = true
-        
-        self:SetupConfigurations()
-        Inputs.Enable()
-        if self.lastCameraMode and self.lastCameraMode == Enum.CameraMode.LockFirstPerson then
-            self.currentSubjectDistance = 0.5
-            self:EnterFirstPerson()
-        end
-    end
+	if not self.enabled then
+		self.enabled = true
+
+		self:SetupConfigurations()
+		Inputs.Enable()
+		if self.lastCameraMode and self.lastCameraMode == Enum.CameraMode.LockFirstPerson then
+			self.currentSubjectDistance = 0.5
+			self:EnterFirstPerson()
+		end
+	end
 end
 
 function BaseCamera:Disable()
-    if self.enabled then
-        self.enabled = false
-        DisconnectAll(self.connections)
-        Inputs.Disable()
-
-    end
-    
+	if self.enabled then
+		self.enabled = false
+		DisconnectAll(self.connections)
+		Inputs.Disable()
+	end
 end
-
 
 return BaseCamera

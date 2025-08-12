@@ -47,6 +47,7 @@ type KeyCameraClass = {
 	BindPresetToInput: (self: KeyCamera, PresetName: string, input: Enum.KeyCode | Enum.UserInputType, HoldToUse: boolean) -> (),
 	UnbindPresetToInput: (self: KeyCamera, PresetName: string) -> (),
 	SetCanZoom: (self: KeyCamera, canZoom: boolean) -> (),
+	ApplyRecoil: (self: KeyCamera, recoil: Vector2) -> (),
 	Update: (self: KeyCamera, dt: number) -> (),
 	IsEnabled: (self: KeyCamera) -> boolean,
 	Enable: (self: KeyCamera) -> (),
@@ -126,6 +127,10 @@ function KeyCamera:SetCanZoom(canZoom: boolean)
 	local settings = self.activeCameraController:GetSettings()
 	settings.CanZoom = canZoom
 	self.activeCameraController:UpdateSettings(settings)
+end
+
+function KeyCamera:ApplyRecoil(recoil: Vector2)
+	self.activeCameraController:ApplyRecoil(recoil)
 end
 
 --RenderStep
