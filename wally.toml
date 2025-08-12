@@ -1,0 +1,16 @@
+[package]
+name = "keyeater/keycamera"
+version = "0.1.0"
+registry = "https://github.com/KeyEater/KeyCamera"
+license = "MIT"
+authors = ["keyeater"]
+realm = "shared"
+
+description = "A basic camera handler"
+
+exclude = ["*"]
+include = ["src", "src/*", "default.project.json", "wally.toml"]
+
+[dev-dependencies]
+
+[dependencies]
