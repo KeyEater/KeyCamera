@@ -71,9 +71,7 @@ export type BaseCamera = typeof(setmetatable(
 		connections: { RBXScriptConnection },
 		settings: CameraSettings,
 
-		recoilVector: Vector2?,
-		counterForceX: number,
-		counterForceY: number,
+		recoil: Vector2?,
 
 		inFirstPerson: boolean,
 		lastUpdate: number,
@@ -213,10 +211,14 @@ function BaseCamera:GetSubjectPosition(): Vector3
 end
 
 function BaseCamera:EnterFirstPerson()
+	-- TODO: Implement logic to transition the camera into first-person mode.
+	-- This may involve setting camera properties, updating UI, and locking controls.
 	print("WIP")
 end
 
 function BaseCamera:LeaveFirstPerson()
+	-- TODO: Implement logic to transition the camera out of first-person mode.
+	-- This may involve restoring camera properties, updating UI, and unlocking controls.
 	print("wip")
 end
 
@@ -236,7 +238,7 @@ function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
 		end
 	end
 	-- Pass target distance and zoom direction to the zoom controller
-	ZoomController.SetZoomParameters(self.currentSubjectDistance, math.sign(desiredDistance - lastDistance))
+	ZoomController.SetZoomGoal(self.currentSubjectDistance)
 end
 
 function BaseCamera:StepZoom()
@@ -295,9 +297,14 @@ function BaseCamera:Update(dt: number)
 	local subjectPosition = self:GetSubjectPosition()
 
 	local rotateInput = Inputs.getRotation() + self.recoil * dt
+	-- Clamp rotateInput to prevent floating-point drift
+	rotateInput = Vector2.new(
+		math.clamp(rotateInput.X, -math.pi, math.pi),
+		math.clamp(rotateInput.Y, -math.pi, math.pi)
+	)
 	self.recoil = self.recoil:Lerp(Vector2.zero, math.min(dt * 10, 1))
 
-	
+	self.recoil = self.recoil:Lerp(Vector2.new(0, 0), math.min(dt * 10, 1))
 
 	self:StepZoom()
 
@@ -347,6 +354,20 @@ function BaseCamera:Disable()
 		DisconnectAll(self.connections)
 		Inputs.Disable()
 	end
+end
+
+function BaseCamera:Destroy()
+	self:Disable()
+	if lastRotationTypeOverride then
+		UserGameSettings.RotationType = savedRotationType
+	end
+	if lastMouseBehaviorOverride then
+		UserInputService.MouseBehavior = savedMouseBehavior
+	end
+	if self.inFirstPerson then
+		self:LeaveFirstPerson()
+	end
+	DisconnectAll(self.connections)
 end
 
 return BaseCamera

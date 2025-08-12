@@ -1,13 +1,17 @@
 --!nonstrict
+
+-- Core Roblox Services
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 
+-- Constants
 local CAMERA_INPUT_PRIORITY = Enum.ContextActionPriority.Medium.Value
 
 local ROTATION_SPEED_MOUSE = Vector2.new(1, 0.77)*math.rad(0.5) -- (rad/inputdelta)
 local ZOOM_SPEED_MOUSE = 1 -- (scaled studs/wheel click)
 local ZOOM_SPEED_KEYS = 0.1 -- (studs/s)
 
+-- Input State Tables
 local keyboardState = {
     I = 0,
     O = 0
@@ -18,7 +22,7 @@ local mouseState = {
     Wheel = 0
 }
 
-
+-- Inputs Module
 local Inputs = {}
 
 function Inputs.getRotation(): Vector2
@@ -31,6 +35,7 @@ function Inputs.getZoomDelta(): number
 	local kMouse = -mouseState.Wheel
    	return kKeyboard*ZOOM_SPEED_KEYS + kMouse*ZOOM_SPEED_MOUSE
 end
+
 
 do
     local function mouseMovement(action, state, input)
@@ -57,6 +62,7 @@ do
     end
 
     local inputsEnabled = false
+    -- Function to enable input handling
     function Inputs.Enable()
         if inputsEnabled then
             return
@@ -70,6 +76,7 @@ do
         ContextActionService:BindActionAtPriority("KeyCameraKeypress", keypress, false, CAMERA_INPUT_PRIORITY, Enum.KeyCode.I, Enum.KeyCode.O)
     end
 
+    -- Function to disable input handling
     function Inputs.Disable()
         if not inputsEnabled then
             return
@@ -87,11 +94,13 @@ do
         return inputsEnabled
     end
 
+    -- Function to reset inputs at the end of the frame
     function Inputs.resetInputsForFrameEnd()
         mouseState.Movement = Vector2.new()
         mouseState.Wheel = 0
     end
 
+    -- Reset input devices when the window focus changes
     UserInputService.WindowFocused:Connect(resetInputDevices)
 	UserInputService.WindowFocusReleased:Connect(resetInputDevices)
 end

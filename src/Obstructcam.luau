@@ -2,7 +2,6 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local ZoomController = require(script.Parent:WaitForChild("ZoomController"))
 
@@ -45,6 +44,7 @@ end
 
 local function GetSubjectPosition(): Vector3
 	local subject = camera.CameraSubject
+	local result = Vector3.new()
 
 	if not subject then
 		return Vector3.new()
@@ -99,7 +99,7 @@ Obstructcam.__index = Obstructcam
 function Obstructcam.new(excldueList, exPlayers)
 	local self = setmetatable({
 		customExclude = excldueList or {},
-		excludePlayer = exPlayers or true,
+		excludePlayer = exPlayers ~= nil and exPlayers or true,
 	}, Obstructcam)
 	return self
 end
@@ -139,7 +139,7 @@ function Obstructcam:Update(dt, desiredCameraCFrame, desiredCameraFocus)
 	local Focus = rotatedFocus * CFrame.new(0, 0, MIN_FOCUS_DIST)
 	local radius = (projX + projY) / 2
 	local origin = Focus.Position
-	local FocusRaycast = workspace:Spherecast(origin, radius, origin - Focus.LookVector * (targetDist + nearPlaneZ), excludeParams)
+	local FocusRaycast = workspace:Spherecast(origin, radius, -Focus.LookVector * (targetDist + nearPlaneZ), excludeParams)
 	if FocusRaycast then
 		local zoomiest = (FocusRaycast.Position - origin).Magnitude - math.abs(nearPlaneZ)
 		if zoomiest < obstructZoom then
@@ -147,20 +147,21 @@ function Obstructcam:Update(dt, desiredCameraCFrame, desiredCameraFocus)
 		end
 	end
 
-    local Subject = GetSubjectPosition()
-    local SubjectRaycast = workspace:Spherecast(Subject, radius, Subject - Focus.LookVector * (targetDist + nearPlaneZ), excludeParams)
+	local Subject = GetSubjectPosition()
+	local SubjectRaycast = workspace:Spherecast(Subject, radius, -Focus.LookVector * (targetDist + nearPlaneZ), excludeParams)
 	if SubjectRaycast then
 		local zoomiest = (SubjectRaycast.Position - Subject).Magnitude - math.abs(nearPlaneZ)
 		if zoomiest < obstructZoom then
 			obstructZoom = zoomiest
 		end
 	end
-    obstructZoom -= 0.5
+	obstructZoom -= 0.5
 
 	local zoom = ZoomController.Update(dt, obstructZoom)
 	return rotatedFocus * CFrame.new(0, 0, zoom), desiredCameraFocus
 end
 
-function Obstructcam:Destroy() end
+function Obstructcam:Destroy() 
+end
 
 return Obstructcam

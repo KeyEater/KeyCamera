@@ -1,30 +1,20 @@
 --!nonstrict
+
+-- Constants
 local ZOOM_STIFFNESS = 4.5
 local ZOOM_DEFAULT = 12.5
---local ZOOM_ACCELERATION = 0.0375
-
 local MIN_FOCUS_DIST = 0.5
---local DIST_OPAQUE = 1
-
---local DEFAULT_CAMERA_MIN_ZOOM_DISTANCE = 0.5
 local DEFAULT_CAMERA_MAX_ZOOM_DISTANCE = 400
 
+-- Spring Module
 local ConstrainedSpring = require(script:WaitForChild("ConstrainedSpring"))
-
---local cameraMinZoomDistance = DEFAULT_CAMERA_MIN_ZOOM_DISTANCE
+-- Variable to hold the maximum zoom distance for the camera
 local cameraMaxZoomDistance = DEFAULT_CAMERA_MAX_ZOOM_DISTANCE
-
-
-
+-- Spring Object for zoom functionality
 local zoomSpring = ConstrainedSpring.new(ZOOM_STIFFNESS, ZOOM_DEFAULT, MIN_FOCUS_DIST, cameraMaxZoomDistance)
---local zoomDelta = 0
 
+-- ZoomController Module
 local ZoomController = {}
-
-function ZoomController.UpdateZoomDistances(minDistance, maxDistance)
-	cameraMinZoomDistance = minDistance
-	cameraMaxZoomDistance = maxDistance
-end
 
 function ZoomController.GetZoomRadius()
 	return zoomSpring.x
@@ -34,11 +24,11 @@ function ZoomController.GetGoal()
 	return zoomSpring.goal
 end
 
-function ZoomController.SetZoomParameters(targetZoom, newZoomDelta)
+function ZoomController.SetZoomGoal(targetZoom)
 	zoomSpring.goal = targetZoom
-	zoomDelta = newZoomDelta
 end
 
+-- RenderStep function to update the zoom spring
 function ZoomController.Update(dt: number, customZoom: number)
 	if customZoom < 0.5 then
 		customZoom = 0.5
