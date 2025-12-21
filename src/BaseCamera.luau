@@ -36,7 +36,10 @@ local FIRST_PERSON_DISTANCE_MIN = 0.5
 local DEFAULT_CAMERA_MIN_ZOOM_DISTANCE = 0.5
 local DEFAULT_CAMERA_MAX_ZOOM_DISTANCE = 400
 
-local FIRST_PERSON_DISTANCE_THRESHOLD = 0.5
+local FIRST_PERSON_DISTANCE_THRESHOLD = 1
+local function EMPTY_FUNCTION() end
+
+type GenericFunction = (any?, any?) -> any?
 
 type BaseCameraClass = {
 	__index: BaseCameraClass,
@@ -45,6 +48,9 @@ type BaseCameraClass = {
 	CheckSettings: (self: BaseCamera) -> (),
 	GetSettings: (self: BaseCamera) -> CameraSettings,
 	UpdateSettings: (self: BaseCamera, preset: CameraSettings) -> (),
+	SetPerspectiveEvent: (self: BaseCamera, EventFunction: GenericFunction, EventFunctionObject: any?) -> (),
+	FirePerspectiveChanged: (self: BaseCamera) -> (),
+	SwitchPerspective: (self: BaseCamera) -> (),
 	UpdateMouseBehavior: (self: BaseCamera) -> (),
 	ApplyRecoil: (self: BaseCamera, recoil: Vector2) -> (),
 	GetSubjectPosition: (self: BaseCamera) -> Vector3,
@@ -60,6 +66,8 @@ type BaseCameraClass = {
 	SetupConfigurations: (self: BaseCamera) -> (),
 	Enable: (self: BaseCamera) -> (),
 	Disable: (self: BaseCamera) -> (),
+
+	Destroy: (self: BaseCamera) -> ()
 }
 
 export type BaseCamera = typeof(setmetatable(
@@ -67,13 +75,14 @@ export type BaseCamera = typeof(setmetatable(
 		enabled: boolean,
 		lastCameraMode: Enum.CameraMode?,
 		currentSubjectDistance: number,
+		lastSubjectDistance: number,
 		lastSubjectPosition: Vector3,
 		connections: { RBXScriptConnection },
 		settings: CameraSettings,
-
-		recoil: Vector2?,
-
+		recoil: Vector2,
 		inFirstPerson: boolean,
+		perspectiveEventFunction: GenericFunction,
+		perspectiveEventSelfReference: any?,
 		lastUpdate: number,
 	},
 	{} :: BaseCameraClass
@@ -88,14 +97,16 @@ export type CameraSettings = {
 	MaxZoom: number,
 }
 
-local BaseCamera = {}
+local BaseCamera = {} :: BaseCameraClass
 BaseCamera.__index = BaseCamera
 
 function BaseCamera.new(DefaultSettings: CameraSettings)
+
 	local self: BaseCamera = setmetatable({
 		enabled = false,
 		lastCameraMode = nil,
 		currentSubjectDistance = 10,
+		lastSubjectDistance = 10,
 		lastSubjectPosition = Vector3.new(),
 		connections = {},
 		settings = DefaultSettings,
@@ -103,6 +114,9 @@ function BaseCamera.new(DefaultSettings: CameraSettings)
 		recoil = Vector2.new(0, 0),
 
 		inFirstPerson = false,
+		perspectiveEventFunction = EMPTY_FUNCTION,
+		perspectiveEventSelfReference = nil,
+
 		lastUpdate = 0,
 	}, BaseCamera)
 	self:CheckSettings()
@@ -110,10 +124,10 @@ function BaseCamera.new(DefaultSettings: CameraSettings)
 end
 
 function BaseCamera:CheckSettings()
-	assert(typeof(self.settings.FieldOfView) == "number")
-	assert(typeof(self.settings.Offset) == "Vector3")
-	assert(typeof(self.settings.MouseLock) == "boolean")
-	assert(typeof(self.settings.CanZoom) == "boolean")
+	assert(typeof(self.settings.FieldOfView) == "number", "Passed setting FieldOfView is not a number")
+	assert(typeof(self.settings.Offset) == "Vector3", "Passed setting Offset is not a Vector3")
+	assert(typeof(self.settings.MouseLock) == "boolean", "Passed setting MouseLock is not a boolean")
+	assert(typeof(self.settings.CanZoom) == "boolean", "Passed setting CanZoom is not a boolean")
 	if not self.settings.MinZoom or typeof(self.settings.MinZoom) ~= "number" then
 		self.settings.MinZoom = DEFAULT_CAMERA_MIN_ZOOM_DISTANCE
 	end
@@ -129,6 +143,25 @@ end
 function BaseCamera:UpdateSettings(preset: CameraSettings)
 	self.settings = preset
 	self:CheckSettings()
+end
+
+function BaseCamera:SetPerspectiveEvent(EventFunction: GenericFunction, EventFunctionObject: any?)
+	self.perspectiveEventFunction = EventFunction
+	self.perspectiveEventSelfReference = EventFunctionObject
+end
+
+function BaseCamera:FirePerspectiveChanged()
+	local Status = self.inFirstPerson
+	task.defer(self.perspectiveEventFunction, self.perspectiveEventSelfReference or Status, Status)
+end
+
+function BaseCamera:SwitchPerspective()
+	if self.inFirstPerson then
+		self:SetCameraToSubjectDistance(self.lastSubjectDistance)
+	else
+		self.lastSubjectDistance = self.currentSubjectDistance
+		self:SetCameraToSubjectDistance(FIRST_PERSON_DISTANCE_MIN)
+	end
 end
 
 function BaseCamera:UpdateMouseBehavior()
@@ -211,19 +244,18 @@ function BaseCamera:GetSubjectPosition(): Vector3
 end
 
 function BaseCamera:EnterFirstPerson()
-	-- TODO: Implement logic to transition the camera into first-person mode.
-	-- This may involve setting camera properties, updating UI, and locking controls.
-	print("WIP")
+	self.inFirstPerson = true
+	self:FirePerspectiveChanged()
+	self:UpdateMouseBehavior()
 end
 
 function BaseCamera:LeaveFirstPerson()
-	-- TODO: Implement logic to transition the camera out of first-person mode.
-	-- This may involve restoring camera properties, updating UI, and unlocking controls.
-	print("wip")
+	self.inFirstPerson = false
+	self:FirePerspectiveChanged()
+	self:UpdateMouseBehavior()
 end
 
 function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
-	local lastDistance = self.currentSubjectDistance
 
 	local newSubjectDistance = math.clamp(desiredDistance, self.settings.MinZoom, self.settings.MaxZoom)
 	if newSubjectDistance < FIRST_PERSON_DISTANCE_THRESHOLD then

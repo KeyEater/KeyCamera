@@ -5,7 +5,7 @@
     Handles custom camera control, presets, input bindings, and occlusion for Roblox games.
 --]]
 
-local KeyCamera = {} :: KeyCameraClass
+local KeyCamera = {}
 KeyCamera.__index = KeyCamera
 
 -- Roblox Services
@@ -21,10 +21,13 @@ local Inputs = require(script:WaitForChild("Inputs"))
 local BaseCamera = require(script:WaitForChild("BaseCamera"))
 -- Occlusion Module
 local Obstructcam = require(script:WaitForChild("Obstructcam"))
+-- First Person Transparency Module
+local TransparencyController = require(script:WaitForChild("TransparencyController"))
 
 -- Ensure LocalPlayer exists before continuing
 if not Players.LocalPlayer then
-    return {}
+    return ({} :: any)
+    
 end
 assert(Players.LocalPlayer, "Strict type check")
 local Player = Players.LocalPlayer
@@ -39,17 +42,24 @@ local DEFAULT_PRESET: BaseCamera.CameraSettings = {
     MaxZoom = 60
 }
 
-type Generic = any
-type GenericOptional = any?
+type GenericFunction = (any?, any?) -> any?
 
--- KeyCamera class type definition
-type KeyCameraClass = {
-    __index: KeyCameraClass,
-    new: () -> KeyCamera, --required
+export type KeyCamera = {
+    activeCameraController: BaseCamera.BaseCamera?,
+    activeOcclusionModule: any?,
+    activeTransparencyController: any,
+    connections: { RBXScriptConnection },
+    boundActions: { string },
+    enabled: boolean,
+    presets: { [string]: BaseCamera.CameraSettings },
+    previousCameraType: Enum.CameraType?,
 
-    AddPreset: (self: KeyCamera,PresetName: string, Preset: BaseCamera.CameraSettings) -> (),
+    new: () -> KeyCamera,
+    SetPerspectiveEventFunction: (self: KeyCamera, PerspecticveEventFunction: GenericFunction, EventFunctionObject: any?) -> (),
+    BindTogglePerspectiveToInput: (self: KeyCamera, input: Enum.KeyCode | Enum.UserInputType) -> (),
+    AddPreset: (self: KeyCamera, PresetName: string, Preset: BaseCamera.CameraSettings) -> (),
     UsePreset: (self: KeyCamera, PresetName: string) -> (),
-    SetPresetToDefault: (self: KeyCamera, PresetName: string | BaseCamera.CameraSettings) -> (),
+    SetPresetToDefault: (self: KeyCamera, PresetName: string) -> (),
     BindPresetToInput: (self: KeyCamera, PresetName: string, input: Enum.KeyCode | Enum.UserInputType, HoldToUse: boolean) -> (),
     UnbindPresetToInput: (self: KeyCamera, PresetName: string) -> (),
     SetCanZoom: (self: KeyCamera, canZoom: boolean) -> (),
@@ -59,31 +69,23 @@ type KeyCameraClass = {
     Enable: (self: KeyCamera) -> (),
     Disable: (self: KeyCamera) -> (),
     Destroy: (self: KeyCamera) -> (),
-} 
-
--- Exported KeyCamera type
-export type KeyCamera = typeof(setmetatable({} :: {
-    activeCameraController: BaseCamera.BaseCamera,
-    activeOcclusionModule: any,
-    connections:  {RBXScriptConnection},
-    enabled: boolean,
-    presets: {[string]: BaseCamera.CameraSettings},
-    previousCameraType: Enum.CameraType?
-}, {} :: KeyCameraClass))
+}
 
 
 --Key Camera Constructor
 function KeyCamera.new(): KeyCamera
+
     local self: KeyCamera = setmetatable({
         activeCameraController = BaseCamera.new(DEFAULT_PRESET),
         activeOcclusionModule = Obstructcam.new(),
+        activeTransparencyController = TransparencyController.new(),
         connections = {},
 		boundActions = {},
         enabled = false,
         presets = {Default = DEFAULT_PRESET},
         previousCameraType = nil,
-        previousMouseLock = nil
-    }, KeyCamera)
+        previousMouseLock = nil,
+    }, KeyCamera) :: any
 	-- Initialize camera controller
     RunService:BindToRenderStep("cameraRenderUpdate", Enum.RenderPriority.Camera.Value, function(dt) self:Update(dt) end)
 
@@ -91,6 +93,25 @@ function KeyCamera.new(): KeyCamera
     table.insert(self.connections, Player.CharacterRemoving:Connect(function() self:Destroy() end))
 
     return self
+end
+
+-- Change Perspective --
+function KeyCamera:SetPerspectiveEventFunction(PerspecticveEventFunction: GenericFunction, EventFunctionObject: any?)
+    self.activeCameraController:SetPerspectiveEvent(PerspecticveEventFunction, EventFunctionObject)
+end
+
+function KeyCamera:BindTogglePerspectiveToInput(input: Enum.KeyCode | Enum.UserInputType)
+    ContextActionService:UnbindAction(`KeyCamera_TogglePerspective`)
+	table.remove(self.boundActions, table.find(self.boundActions, `KeyCamera_TogglePerspective`))
+
+    local function TogglePerspective(_action, state, _input)
+        if state == Enum.UserInputState.Begin then
+            self.activeCameraController:SwitchPerspective()
+        end
+    end
+
+    ContextActionService:BindAction(`KeyCamera_TogglePerspective`,TogglePerspective, false, input)
+	table.insert(self.boundActions, `KeyCamera_TogglePerspective`)
 end
 
 -- Presets Section --
@@ -105,7 +126,7 @@ function KeyCamera:UsePreset(PresetName: string)
     end
 end
 
-function KeyCamera:SetPresetToDefault(PresetName: string | BaseCamera.CameraSettings)
+function KeyCamera:SetPresetToDefault(PresetName: string)
     local newDefault = self.presets[PresetName]
     if newDefault then
         self.presets["Default"] = newDefault
@@ -164,6 +185,8 @@ function KeyCamera:Update(dt: number)
         currentCamera.CFrame = newCameraCFrame
         currentCamera.Focus = newCameraFocus
 
+        self.activeTransparencyController:Update(dt)
+
         if Inputs.GetInputsEnabled() then
             Inputs.resetInputsForFrameEnd()
         end
@@ -184,6 +207,7 @@ function KeyCamera:Enable()
         self.previousCameraType = camera.CameraType
         camera.CameraType = Enum.CameraType.Scriptable
         self.activeCameraController:Enable()
+        self.activeTransparencyController:SetSubject(workspace.CurrentCamera.CameraSubject or Players.LocalPlayer.Character)
     end
 end
 
@@ -210,8 +234,6 @@ function KeyCamera:Destroy()
 	self.boundActions = {}
 	self.activeCameraController:Destroy()
 	self.activeOcclusionModule:Destroy()
-	self.activeCameraController = nil
-	self.activeOcclusionModule = nil
 end
 
 return KeyCamera
