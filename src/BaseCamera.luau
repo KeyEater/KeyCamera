@@ -1,4 +1,9 @@
 --!strict
+--[[
+	BaseCamera Module
+	Main Camera controller, handles the movement and distance to the subject
+]]
+
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -100,6 +105,7 @@ export type CameraSettings = {
 local BaseCamera = {} :: BaseCameraClass
 BaseCamera.__index = BaseCamera
 
+-- Constructor
 function BaseCamera.new(DefaultSettings: CameraSettings)
 
 	local self: BaseCamera = setmetatable({
@@ -123,6 +129,7 @@ function BaseCamera.new(DefaultSettings: CameraSettings)
 	return self
 end
 
+-- Validate and normalize camera settings
 function BaseCamera:CheckSettings()
 	assert(typeof(self.settings.FieldOfView) == "number", "Passed setting FieldOfView is not a number")
 	assert(typeof(self.settings.Offset) == "Vector3", "Passed setting Offset is not a Vector3")
@@ -136,25 +143,30 @@ function BaseCamera:CheckSettings()
 	end
 end
 
+-- Accessors for settings
 function BaseCamera:GetSettings()
 	return self.settings
 end
 
+-- Replace settings and re-validate
 function BaseCamera:UpdateSettings(preset: CameraSettings)
 	self.settings = preset
 	self:CheckSettings()
 end
 
+-- Perspective callbacks
 function BaseCamera:SetPerspectiveEvent(EventFunction: GenericFunction, EventFunctionObject: any?)
 	self.perspectiveEventFunction = EventFunction
 	self.perspectiveEventSelfReference = EventFunctionObject
 end
 
+-- Notify listeners when first-person state flips
 function BaseCamera:FirePerspectiveChanged()
 	local Status = self.inFirstPerson
 	task.defer(self.perspectiveEventFunction, self.perspectiveEventSelfReference or Status, Status)
 end
 
+-- Toggle between first- and third-person distances
 function BaseCamera:SwitchPerspective()
 	if self.inFirstPerson then
 		self:SetCameraToSubjectDistance(self.lastSubjectDistance)
@@ -164,6 +176,7 @@ function BaseCamera:SwitchPerspective()
 	end
 end
 
+-- Keep Roblox mouse/rotation behavior in sync with camera mode
 function BaseCamera:UpdateMouseBehavior()
 	if self.inFirstPerson or self.settings.MouseLock then
 		if UserGameSettings.RotationType ~= lastRotationTypeOverride then
@@ -188,10 +201,12 @@ function BaseCamera:UpdateMouseBehavior()
 	end
 end
 
+-- Apply recoil impulse
 function BaseCamera:ApplyRecoil(recoil: Vector2)
 	self.recoil += recoil
 end
 
+-- Track where the camera should look relative to the subject
 function BaseCamera:GetSubjectPosition(): Vector3
 	local result = self.lastSubjectPosition
 	local camera = workspace.CurrentCamera
@@ -255,6 +270,7 @@ function BaseCamera:LeaveFirstPerson()
 	self:UpdateMouseBehavior()
 end
 
+-- Update target distance and handle first-person thresholding
 function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
 
 	local newSubjectDistance = math.clamp(desiredDistance, self.settings.MinZoom, self.settings.MaxZoom)
@@ -273,6 +289,7 @@ function BaseCamera:SetCameraToSubjectDistance(desiredDistance: number)
 	ZoomController.SetZoomGoal(self.currentSubjectDistance)
 end
 
+-- Process scroll wheel zoom with curved sensitivity
 function BaseCamera:StepZoom()
 	local zoom: number = self.currentSubjectDistance
 	local zoomDelta = Inputs.getZoomDelta()
@@ -297,6 +314,7 @@ function BaseCamera:StepZoom()
 	return ZoomController.GetZoomRadius()
 end
 
+-- Compute constrained rotation CFrame from input
 function BaseCamera:CalculateNewLookCFrameFromArg(suppliedLookVector: Vector3, rotateInput: Vector2): CFrame
 	local currLookVector: Vector3 = suppliedLookVector
 	local currPitchAngle = math.asin(currLookVector.Y)
@@ -309,6 +327,7 @@ function BaseCamera:CalculateNewLookCFrameFromArg(suppliedLookVector: Vector3, r
 	return newLookCFrame
 end
 
+-- Helper to extract look vector from rotation CFrame
 function BaseCamera:CalculateNewLookVectorFromArg(suppliedLookVector: Vector3, rotateInput: Vector2): Vector3
 	local newLookCFrame = self:CalculateNewLookCFrameFromArg(suppliedLookVector, rotateInput)
 	return newLookCFrame.LookVector
@@ -316,6 +335,7 @@ end
 
 
 
+-- Main camera update loop
 function BaseCamera:Update(dt: number)
 	local now = os.clock()
 
@@ -362,11 +382,13 @@ function BaseCamera:Update(dt: number)
 	return newCameraCFrame, newCameraFocus
 end
 
+-- Apply one-time camera defaults
 function BaseCamera:SetupConfigurations()
 	local camera = workspace.CurrentCamera
 	camera.FieldOfView = self.settings.FieldOfView
 end
 
+-- Enable camera control and input hooks
 function BaseCamera:Enable()
 	if not self.enabled then
 		self.enabled = true
@@ -380,6 +402,7 @@ function BaseCamera:Enable()
 	end
 end
 
+-- Disable camera control and disconnect signals
 function BaseCamera:Disable()
 	if self.enabled then
 		self.enabled = false
@@ -388,6 +411,7 @@ function BaseCamera:Disable()
 	end
 end
 
+-- Cleanup overrides and connections
 function BaseCamera:Destroy()
 	self:Disable()
 	if lastRotationTypeOverride then

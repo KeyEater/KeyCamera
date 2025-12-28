@@ -1,6 +1,13 @@
 --!nonstrict
+--[[
+	Transparency Controller
+	Turns the subject of the camera invisible or semi translucient when the camera is close enough
+]]
+
+-- Roblox Services
 local Players = game:GetService("Players")
 
+-- Constants
 local MAX_TWEEN_RATE = 2.8
 local HIDE_IN_FIRST_PERSON_CLASSES = {
 	"BasePart",
@@ -13,7 +20,7 @@ local HIDE_IN_FIRST_PERSON_CLASSES = {
 	"Sparkles",
 	"Explosion"
 }
-
+-- Local Functions
 local function ClearConnections(Connections)
     for index, conn in pairs(Connections) do
         conn:Disconnect()
@@ -21,9 +28,10 @@ local function ClearConnections(Connections)
     end
 end
 
+-- Controller
 local TransparencyController = {}
 TransparencyController.__index = TransparencyController
-
+-- Controller Constructor
 function TransparencyController.new()
     local self = setmetatable({
         transparencyDirty = false,
@@ -40,6 +48,7 @@ function TransparencyController.new()
     return self
 end
 
+-- Check functions --
 function TransparencyController:HasToolAncestor(object: Instance)
 	if object.Parent == nil then return false end
 	assert(object.Parent, "Object does not have a parent")
@@ -54,7 +63,7 @@ function TransparencyController:IsValidPartToModify(part: BasePart)
 		end
 	return false
 end
-
+-- Does a cleanup of the connections and turns the subject back to visible --
 function TransparencyController:TeardownTransparency()
     for child, _ in pairs(self.cachedParts) do
         child.LocalTransparencyModifier = 0
@@ -74,6 +83,8 @@ function TransparencyController:TeardownTransparency()
 	ClearConnections(self.toolDescendantAddedConns)
 	ClearConnections(self.toolDescendantRemovingConns)
 end
+
+-- Setup and preperation of the transparency --
 
 function TransparencyController:CachePartsRecursive(object)
 	if object then
@@ -124,12 +135,10 @@ function TransparencyController:SetupTransparency(character)
 			object.LocalTransparencyModifier = 0
 		end
 	end)
-    print(character)
 	self:CachePartsRecursive(character)
 end
 
 function TransparencyController:SetSubject(subject)
-    print(subject)
     local character = nil
     if subject and subject:IsA("Humanoid") then
         character = subject.Parent
@@ -143,7 +152,7 @@ function TransparencyController:SetSubject(subject)
         self:TeardownTransparency()
     end
 end
-
+-- Render Step function
 function TransparencyController:Update(dt)
     local currentCamera = workspace.CurrentCamera
     if not currentCamera then
@@ -174,9 +183,9 @@ function TransparencyController:Update(dt)
 		self.lastTransparency = transparency
     end
 end
-
+-- Final Cleanup
 function TransparencyController:Destroy()
-    
+    self:SetSubject(nil)
 end
 
 return TransparencyController

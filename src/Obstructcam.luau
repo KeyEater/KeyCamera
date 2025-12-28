@@ -1,10 +1,16 @@
 --!nonstrict
-
+--[[
+	Obstructcam Module
+	This module checks whats behind the camera and makes sure it does not clip inside objects or gets obstructed by something passing between the camera and subject.
+]]
+-- Core Roblox services
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 
+-- Modules
 local ZoomController = require(script.Parent:WaitForChild("ZoomController"))
 
+-- Constants
 local BYPASS_TAG = "CameraBypass"
 local Y_AXIS_INVERSION = CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
 local ZERO_VECTOR3 = Vector3.new(0,0,0)
@@ -20,9 +26,10 @@ local excludeParams = RaycastParams.new()
 excludeParams.IgnoreWater = true
 excludeParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- Variables
 local camera = workspace.CurrentCamera
 local nearPlaneZ, projX, projY
-do
+do -- Sets up connections that update the previously declared variables
 	local function updateProjection()
     	local fov = math.rad(camera.FieldOfView)
 	    local view = camera.ViewportSize
@@ -41,7 +48,7 @@ do
 		nearPlaneZ = camera.NearPlaneZ
 	end)
 end
-
+-- Local functions --
 local function GetSubjectPosition(): Vector3
 	local subject = camera.CameraSubject
 	local result = Vector3.new()
@@ -92,10 +99,11 @@ local function GetSubjectPosition(): Vector3
 	return result
 end
 
-
+-- Class --
 local Obstructcam = {}
 Obstructcam.__index = Obstructcam
 
+-- Obstructcam constructor
 function Obstructcam.new(excldueList, exPlayers)
 	local self = setmetatable({
 		customExclude = excldueList or {},
@@ -126,6 +134,7 @@ function Obstructcam:getExcludeList()
 	return list
 end
 
+-- RenderStep Function -- 
 function Obstructcam:Update(dt, desiredCameraCFrame, desiredCameraFocus)
 	local rotatedFocus = CFrame.new(desiredCameraFocus.Position, desiredCameraCFrame.Position) * Y_AXIS_INVERSION
 
@@ -162,6 +171,8 @@ function Obstructcam:Update(dt, desiredCameraCFrame, desiredCameraFocus)
 end
 
 function Obstructcam:Destroy() 
+	self.customExclude = {}
+	self.excludePlayer = true
 end
 
 return Obstructcam

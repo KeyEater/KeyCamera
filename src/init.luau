@@ -1,5 +1,4 @@
 --!strict
-
 --[[
     KeyCamera Module
     Handles custom camera control, presets, input bindings, and occlusion for Roblox games.
@@ -41,7 +40,7 @@ local DEFAULT_PRESET: BaseCamera.CameraSettings = {
     MinZoom = 0.5,
     MaxZoom = 60
 }
-
+-- Type declaration 
 type GenericFunction = (any?, any?) -> any?
 
 export type KeyCamera = {

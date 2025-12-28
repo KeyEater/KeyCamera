@@ -1,5 +1,8 @@
 --!nonstrict
-
+--[[
+    Inputs Module
+    Gets the mouse inputs and keyboard inputs for movement and zoom features
+]]
 -- Core Roblox Services
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
@@ -25,6 +28,7 @@ local mouseState = {
 -- Inputs Module
 local Inputs = {}
 
+-- Get functions
 function Inputs.getRotation(): Vector2
     local kMouse = mouseState.Movement
     return kMouse*ROTATION_SPEED_MOUSE
@@ -36,7 +40,7 @@ function Inputs.getZoomDelta(): number
    	return kKeyboard*ZOOM_SPEED_KEYS + kMouse*ZOOM_SPEED_MOUSE
 end
 
-
+-- Sets up the inputs module
 do
     local function mouseMovement(action, state, input)
         local delta = input.delta
